@@ -1,11 +1,11 @@
-#include "Servo.h"
+#include "servo.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <memory.h>
 #include <unistd.h>
 #include <errno.h>
 #include <time.h>
-#include "SoftPWM.h"
+#include "soft-pwm.h"
 
 struct _SERVO_State
 {

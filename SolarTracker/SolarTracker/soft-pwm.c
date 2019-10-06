@@ -1,4 +1,4 @@
-#include "SoftPWM.h"
+#include "soft-pwm.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <memory.h>

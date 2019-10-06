@@ -11,9 +11,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{9853e9d9-bd37-46c5-a428-25e3ed718dd9}</ProjectGuid>
+    <ProjectGuid>{1ec4aaf4-4a6f-46c8-b538-4f4b9da1238b}</ProjectGuid>
     <Keyword>AzureSphere</Keyword>
-    <RootNamespace>AzureSphereBlink1</RootNamespace>
+    <RootNamespace>SolarTracker</RootNamespace>
     <MinimumVisualStudioVersion>15.0</MinimumVisualStudioVersion>
     <ApplicationType>Linux</ApplicationType>
     <ApplicationTypeRevision>1.0</ApplicationTypeRevision>
@@ -26,38 +26,59 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'" Label="Configuration">
     <UseDebugLibraries>true</UseDebugLibraries>
-    <TargetSysroot>2</TargetSysroot>
+    <TargetSysroot>2+Beta1905</TargetSysroot>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'" Label="Configuration">
     <UseDebugLibraries>false</UseDebugLibraries>
-    <TargetSysroot>2</TargetSysroot>
+    <TargetSysroot>2+Beta1905</TargetSysroot>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings" />
   <ImportGroup Label="Shared" />
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">
+    <PartnerComponents>005180BC-402F-4CB3-A662-72937DBCDE47</PartnerComponents>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">
+    <PartnerComponents>005180BC-402F-4CB3-A662-72937DBCDE47</PartnerComponents>
+  </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="main.c" />
-    <ClCompile Include="Servo.c" />
-    <ClCompile Include="SoftPWM.c" />
-    <UpToDateCheckInput Include="app_manifest.json" />
-  </ItemGroup>
-  <ItemGroup>
+    <ClCompile Include="epoll_timerfd_utilities.c" />
+    <ClCompile Include="servo.c" />
+    <ClCompile Include="soft-pwm.c" />
     <ClInclude Include="config.h" />
-    <ClInclude Include="mt3620_rdb.h" />
-    <ClInclude Include="Servo.h" />
-    <ClInclude Include="SoftPWM.h" />
+    <ClInclude Include="epoll_timerfd_utilities.h" />
+    <ClInclude Include="servo.h" />
+    <ClInclude Include="soft-pwm.h" />
+    <UpToDateCheckInput Include="app_manifest.json" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalOptions>-Werror=implicit-function-declaration %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-Werror=implicit-function-declaration  %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
-      <LibraryDependencies>applibs;pthread;gcc_s;c</LibraryDependencies>
+      <LibraryDependencies>applibs;pthread;gcc_s;c;azureiot</LibraryDependencies>
       <AdditionalOptions>-Wl,--no-undefined -nodefaultlibs %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <PreBuildEvent>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">
+      </Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">
+      </Command>
+    </PreBuildEvent>
+    <CustomBuildStep>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">
+      </Command>
+    </CustomBuildStep>
+    <CustomBuildStep>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">
+      </Command>
+    </CustomBuildStep>
   </ItemDefinitionGroup>
 </Project>
