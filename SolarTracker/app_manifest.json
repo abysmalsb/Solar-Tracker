@@ -1,0 +1,14 @@
+{
+  "SchemaVersion": 1,
+  "Name" : "SolarTracker",
+  "ComponentId" : "2755f177-ce24-469b-9d9a-1b01ee2201f0",
+  "EntryPoint": "/bin/app",
+  "CmdArgs": [],
+  "Capabilities": {
+    "AllowedConnections": [],
+    "Gpio": [ 0, 2, 16, 34 ],
+    "Uart": [],
+    "WifiConfig": false
+  },
+  "ApplicationType":"Default"
+}
