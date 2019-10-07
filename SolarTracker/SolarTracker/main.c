@@ -255,7 +255,7 @@ void recalculateServoAngles(void)
 	{
 		if (avt < avd)
 		{
-			verticalServoAngle = ++verticalServoAngle;
+			verticalServoAngle++;
 			if (verticalServoAngle > VERTICAL_SERVO_MAX_ANGLE)
 			{
 				verticalServoAngle = VERTICAL_SERVO_MAX_ANGLE;
@@ -263,7 +263,7 @@ void recalculateServoAngles(void)
 		}
 		else if (avt > avd)
 		{
-			verticalServoAngle = --verticalServoAngle;
+			verticalServoAngle--;
 			if (verticalServoAngle < VERTICAL_SERVO_MIN_ANGLE)
 			{
 				verticalServoAngle = VERTICAL_SERVO_MIN_ANGLE;
