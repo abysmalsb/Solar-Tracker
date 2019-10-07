@@ -27,15 +27,25 @@ static void ClosePeripheralsAndHandlers(void);
 
 // File descriptors - initialized to invalid value
 int epollFd = -1;
+int sensorSelectAfd;
+int sensorSelectBfd;
 
 //// ADC connection
 static const char rtAppComponentId[] = "005180bc-402f-4cb3-a662-72937dbcde47";
 static int sockFd = -1;
-static void SendMessageToRTCore(void);
+static void RequestDataFromRTCoreADC(void);
 static void TimerEventHandler(EventData* eventData);
 static void SocketEventHandler(EventData* eventData);
+void recalculateServoAngles();
 static int timerFd = -1;
 uint8_t RTCore_status;
+int channel = 0;
+
+int verticalServoAngle = VERTICAL_SERVO_RESTING_ANGLE;
+int horizontalServoAngle = HORIZONTAL_SERVO_RESTING_ANGLE;
+int lightLevels[4];	
+struct _SERVO_State* verticalServo;
+struct _SERVO_State* horizontalServo;
 
 // event handler data structures. Only the event handler field needs to be populated.
 static EventData timerEventData = { .eventHandler = &TimerEventHandler };
@@ -53,8 +63,6 @@ static void TerminationHandler(int signalNumber)
 	// Don't use Log_Debug here, as it is not guaranteed to be async-signal-safe.
 	terminationRequired = true;
 }
-
-//// ADC connection
 
 /// <summary>
 ///     Handle socket event by reading incoming data from real-time capable application.
@@ -82,7 +90,17 @@ static void SocketEventHandler(EventData* eventData)
 		analog_data.u8[i] = rxBuf[i];
 	}
 
-	Log_Debug("Light sensor: %d\n", analog_data.u32);
+	lightLevels[channel] = analog_data.u32;
+
+	if (channel == 3)
+	{
+		channel = 0;
+		recalculateServoAngles();
+	}
+	else 
+	{
+		channel++;
+	}
 }
 
 /// <summary>
@@ -95,20 +113,23 @@ static void TimerEventHandler(EventData* eventData)
 		return;
 	}
 
-	SendMessageToRTCore();
+	RequestDataFromRTCoreADC();
 }
 
 /// <summary>
 ///     Helper function for TimerEventHandler sends message to real-time capable application.
 /// </summary>
-static void SendMessageToRTCore(void)
+static void RequestDataFromRTCoreADC()
 {
+	GPIO_SetValue(sensorSelectAfd, (channel & 1) > 0);
+	GPIO_SetValue(sensorSelectBfd, (channel & 2) > 0);
+
 	static int iter = 0;
 
-	// Send "Read-ADC-%d" message to real-time capable application.
+	// Send a message to real-time capable application.
 	static char txMessage[32];
 	sprintf(txMessage, "Read-ADC-%d", iter++);
-	Log_Debug("Sending: %s\n", txMessage);
+	//Log_Debug("Sending: %s, Channel: %d\n", txMessage, channel);
 
 	int bytesSent = send(sockFd, txMessage, strlen(txMessage), 0);
 	if (bytesSent == -1)
@@ -118,8 +139,6 @@ static void SendMessageToRTCore(void)
 		return;
 	}
 }
-
-//// end ADC connection
 
 /// <summary>
 ///     Set up SIGTERM termination handler, initialize peripherals, and set up event handlers.
@@ -134,6 +153,7 @@ static int InitPeripheralsAndHandlers(void)
 
 	epollFd = CreateEpollFd();
 	if (epollFd < 0) {
+		Log_Debug("Error creating epollFd.\n");
 		return -1;
 	}
 
@@ -169,8 +189,8 @@ static int InitPeripheralsAndHandlers(void)
 			return -1;
 		}
 
-		// Register one second timer to send a message to the real-time core.
-		static const struct timespec sendPeriod = { .tv_sec = 1,.tv_nsec = 0 };
+		// Register 0.05 second timer to send a message to the real-time core.
+		static const struct timespec sendPeriod = { .tv_sec = 0,.tv_nsec = 5000000 };
 		timerFd = CreateTimerFdAndAddToEpoll(epollFd, &sendPeriod, &timerEventData, EPOLLIN);
 		if (timerFd < 0)
 		{
@@ -211,53 +231,86 @@ void initServo(GPIO_Id gpio, struct _SERVO_State** servo, int minAngle, int maxA
 	}
 }
 
+void recalculateServoAngles(void)
+{
+	int tl = lightLevels[SENSOR_TL_SELECT];
+	int tr = lightLevels[SENSOR_TR_SELECT];
+	int bl = lightLevels[SENSOR_BL_SELECT];
+	int br = lightLevels[SENSOR_BR_SELECT];
+
+	Log_Debug("%d, %d, %d, %d\n", tl, tr, bl, br);
+
+	int dtime = 10;
+	int tol = 50;
+
+	int avt = (tl + tr) / 2; // average value top
+	int avd = (bl + br) / 2; // average value down
+	int avl = (tl + bl) / 2; // average value left
+	int avr = (tr + br) / 2; // average value right
+
+	int dvert = avt - avd; // check the difference of up and down
+	int dhoriz = avl - avr;// check the difference of left and right
+
+	if (-1 * tol > dvert || dvert > tol) // check if the difference is in the tolerance else change vertical angle
+	{
+		if (avt < avd)
+		{
+			verticalServoAngle = ++verticalServoAngle;
+			if (verticalServoAngle > VERTICAL_SERVO_MAX_ANGLE)
+			{
+				verticalServoAngle = VERTICAL_SERVO_MAX_ANGLE;
+			}
+		}
+		else if (avt > avd)
+		{
+			verticalServoAngle = --verticalServoAngle;
+			if (verticalServoAngle < VERTICAL_SERVO_MIN_ANGLE)
+			{
+				verticalServoAngle = VERTICAL_SERVO_MIN_ANGLE;
+			}
+		}
+		SERVO_SetAngle(verticalServo, verticalServoAngle);
+	}
+
+	if (-1 * tol > dhoriz || dhoriz > tol) // check if the difference is in the tolerance else change horizontal angle
+	{
+		if (avl > avr)
+		{
+			horizontalServoAngle = --horizontalServoAngle;
+			if (horizontalServoAngle < HORIZONTAL_SERVO_MIN_ANGLE)
+			{
+				horizontalServoAngle = HORIZONTAL_SERVO_MIN_ANGLE;
+			}
+		}
+		else if (avl < avr)
+		{
+			horizontalServoAngle = ++horizontalServoAngle;
+			if (horizontalServoAngle > HORIZONTAL_SERVO_MAX_ANGLE)
+			{
+				horizontalServoAngle = HORIZONTAL_SERVO_MAX_ANGLE;
+			}
+		}
+		SERVO_SetAngle(horizontalServo, horizontalServoAngle);
+	}
+}
+
 int main(int argc, char* argv[])
 {
 	Log_Debug("Solar Tracker Application starting.\n");
-	// This minimal Azure Sphere app repeatedly toggles GPIO 9, which is the green channel of RGB
-	// LED 1 on the MT3620 RDB.
-	// Use this app to test that device and SDK installation succeeded that you can build,
-	// deploy, and debug an app with Visual Studio, and that you can deploy an app over the air,
-	// per the instructions here: https://docs.microsoft.com/azure-sphere/quickstarts/qs-overview
-	//
-	// It is NOT recommended to use this as a starting point for developing apps; instead use
-	// the extensible samples here: https://github.com/Azure/azure-sphere-samples
-	Log_Debug(
-		"\nVisit https://github.com/Azure/azure-sphere-samples for extensible samples to use as a "
-		"starting point for full applications.\n");
 
-	/*int fds[3];
-	fds[0] = GPIO_OpenAsOutput(VERTICAL_SERVO_GPIO, GPIO_OutputMode_PushPull, GPIO_Value_High);
-	fds[1] = GPIO_OpenAsOutput(HORIYONTAL_SERVO_GPIO, GPIO_OutputMode_PushPull, GPIO_Value_High);
-	for (int i = 0; i < 2; i++) {
-		if (fds[i] < 0) {
-			Log_Debug(
-				"Error opening GPIO: %s (%d). Check that app_manifest.json includes the GPIO used.\n",
-				strerror(errno), errno);
-			return -1;
-		}
+	sensorSelectAfd = GPIO_OpenAsOutput(SENSOR_SELECT_A_GPIO, GPIO_OutputMode_PushPull, GPIO_Value_High);
+	sensorSelectBfd = GPIO_OpenAsOutput(SENSOR_SELECT_B_GPIO, GPIO_OutputMode_PushPull, GPIO_Value_High);
+	// Select C pin of the 4051 multiplexer is hardwired to GND
+	if (sensorSelectAfd < 0 || sensorSelectBfd < 0) {
+		Log_Debug("Error opening GPIO: %s (%d). Check that app_manifest.json includes the GPIO used.\n", strerror(errno), errno);
+		return -1;
 	}
 
-	const struct timespec sleepTime = {1, 0};
-	int counter = 0;
-	while (true) {
-		GPIO_SetValue(fds[0], (counter & 1) > 0);
-		GPIO_SetValue(fds[1], (counter & 2) > 0);
-		nanosleep(&sleepTime, NULL);
-		counter = counter < 3 ? counter + 1 : 0;
-		//GPIO_SetValue(fd, GPIO_Value_Low);
-		//nanosleep(&sleepTime, NULL);
-		//GPIO_SetValue(fd, GPIO_Value_High);
-		//nanosleep(&sleepTime, NULL);
-	}*/
-
-	struct _SERVO_State* verticalServo;
 	initServo(VERTICAL_SERVO_GPIO, &verticalServo, VERTICAL_SERVO_MIN_ANGLE, VERTICAL_SERVO_MAX_ANGLE);
-	struct _SERVO_State* horizontalServo;
 	initServo(HORIZONTAL_SERVO_GPIO, &horizontalServo, HORIZONTAL_SERVO_MIN_ANGLE, HORIZONTAL_SERVO_MAX_ANGLE);
 
-	SERVO_SetAngle(verticalServo, VERTICAL_SERVO_RESTING_ANGLE);
-	SERVO_SetAngle(horizontalServo, HORIZONTAL_SERVO_RESTING_ANGLE);
+	SERVO_SetAngle(verticalServo, verticalServoAngle);
+	SERVO_SetAngle(horizontalServo, horizontalServoAngle);
 
 	if (InitPeripheralsAndHandlers() != 0) {
 		terminationRequired = true;
@@ -273,15 +326,4 @@ int main(int argc, char* argv[])
 	ClosePeripheralsAndHandlers();
 	Log_Debug("Application exiting.\n");
 	return 0;
-
-	// HAL_Delay(20);
-
-	/*
-	void HAL_Delay(int delayTime) {
-	struct timespec ts;
-	ts.tv_sec = 0;
-	ts.tv_nsec = delayTime * 10000;
-	nanosleep(&ts, NULL);
-}
-	*/
 }

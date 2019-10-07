@@ -15,13 +15,13 @@
 /// <summary>Number of photosensors</summary>
 #define SENSOR_NUM							4
 /// <summary>Photosensor top left select value</summary>
-#define SENSOR_TL_SELECT					0b0
+#define SENSOR_TL_SELECT					0
 /// <summary>Photosensor top right select value</summary>
-#define SENSOR_TR_SELECT					0b1
+#define SENSOR_TR_SELECT					1
 /// <summary>Photosensor bottom left select value</summary>
-#define SENSOR_BL_SELECT					0b10
+#define SENSOR_BL_SELECT					2
 /// <summary>Photosensor bottom right select value</summary>
-#define SENSOR_BR_SELECT					0b11
+#define SENSOR_BR_SELECT					3
 
 /// <summary>Vertical resting angle</summary>
 #define VERTICAL_SERVO_RESTING_ANGLE		0
@@ -32,7 +32,7 @@
 /// <summary>Horizontal min angle</summary>
 #define HORIZONTAL_SERVO_MIN_ANGLE			0
 /// <summary>Vertical max angle</summary>
-#define VERTICAL_SERVO_MAX_ANGLE			145
+#define VERTICAL_SERVO_MAX_ANGLE			140
 /// <summary>Horizontal max angle</summary>
 #define HORIZONTAL_SERVO_MAX_ANGLE			180
 
