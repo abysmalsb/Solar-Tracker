@@ -28,6 +28,9 @@
     <ClCompile Include="soft-pwm.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="rgb-lcd.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="epoll_timerfd_utilities.h">
@@ -37,6 +40,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="soft-pwm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="rgb-lcd.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

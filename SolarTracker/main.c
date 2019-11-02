@@ -6,11 +6,11 @@
 #include <stdio.h>
 #include <time.h>
 
-//#include <soc/mt3620_gpios.h>
-
 #include <applibs/log.h>
 #include <applibs/gpio.h>
 #include <applibs/adc.h>
+#include <applibs/i2c.h>
+#include <soc/mt3620_i2cs.h>
 
 //// ADC connection
 #include <sys/time.h>
@@ -19,6 +19,7 @@
 
 #include "hw/solar_tracker_hardware.h"
 #include "servo.h"
+#include "rgb-lcd.h"
 #include "epoll_timerfd_utilities.h"
 
 // Support functions.
@@ -34,6 +35,9 @@ int sensorSelectBfd = -1;
 
 // The maximum voltage
 static float maxVoltage = 2.5f;
+
+int displayColumns = 16;
+int displayRows = 2;
 
 //// ADC connection
 static void UpdateLightLevels(void);
@@ -100,6 +104,30 @@ static void UpdateLightLevels()
 	recalculateServoAngles();
 }
 
+void initServo(GPIO_Id gpio, struct _SERVO_State** servo, int minAngle, int maxAngle)
+{
+	struct SERVO_Config servoConfig;
+
+	servoConfig.gpio = gpio;
+	servoConfig.minAngle = minAngle;
+	servoConfig.maxAngle = maxAngle;
+	servoConfig.minPulse = 600000;
+	servoConfig.maxPulse = 2400000;
+	servoConfig.period = 20000000;
+
+	if (SERVO_Init(&servoConfig, servo) < 0)
+	{
+		Log_Debug("Error initializing servo 0\n");
+		return -1;
+	}
+}
+
+void printInitError(char* errorMessage)
+{
+	printLine(0, "E:Failed to init");
+	printLine(1, errorMessage);
+}
+
 /// <summary>
 ///     Set up SIGTERM termination handler, initialize peripherals, and set up event handlers.
 /// </summary>
@@ -117,31 +145,64 @@ static int InitPeripheralsAndHandlers(void)
 		return -1;
 	}
 
+	//// LCD display
+
+	int i2cFd = I2CMaster_Open(MT3620_RDB_HEADER4_ISU2_I2C);
+
+	if (i2cFd < 0) {
+		Log_Debug("ERROR: I2CMaster_Open: errno=%d (%s)\n", errno, strerror(errno));
+		return -1;
+	}
+
+	int result = I2CMaster_SetBusSpeed(i2cFd, I2C_BUS_SPEED_STANDARD);
+	if (result != 0) {
+		Log_Debug("ERROR: I2CMaster_SetBusSpeed: errno=%d (%s)\n", errno, strerror(errno));
+		return -1;
+	}
+
+	result = I2CMaster_SetTimeout(i2cFd, 100);
+	if (result != 0) {
+		Log_Debug("ERROR: I2CMaster_SetTimeout: errno=%d (%s)\n", errno, strerror(errno));
+		return -1;
+	}
+
+	// set up the LCD's number of columns, rows and i2c file descriptor:
+	begin(displayColumns, displayRows, i2cFd);
+	// set background color for the display
+	setRGB(0, 255, 255);
+	// Print a message to the LCD.
+	printLine(0, "Initializing");
+
+	//// LCD display is initialized
+
+	//// Init sensor channel select GPIO-s
+
+	sensorSelectAfd = GPIO_OpenAsOutput(SENSOR_SELECT_A_GPIO, GPIO_OutputMode_PushPull, GPIO_Value_High);
+	sensorSelectBfd = GPIO_OpenAsOutput(SENSOR_SELECT_B_GPIO, GPIO_OutputMode_PushPull, GPIO_Value_High);
+	// Select C pin of the 4051 multiplexer is hardwired to GND
+	if (sensorSelectAfd < 0 || sensorSelectBfd < 0) {
+		printInitError("ADC ch select");
+		Log_Debug("Error opening GPIO: %s (%d). Check that app_manifest.json includes the GPIO used.\n", strerror(errno), errno);
+		return -1;
+	}
+
+	//// Sensor channel select GPIO-s are initialized
+
+	//// ADC connection
+
 	adcControllerFd = ADC_Open(ADC_CONTROLLER);
 	if (adcControllerFd < 0) {
+		printInitError("ADC controller");
 		Log_Debug("ADC_Open failed with error: %s (%d)\n", strerror(errno), errno);
 		return -1;
 	}
 
-	Log_Debug("fd: %d, open: %d, channel: %d\n", adcControllerFd, ADC_CONTROLLER, PHOTO_SENSOR_CHANNEL);
-
-	int sampleBitCount = ADC_GetSampleBitCount(adcControllerFd, PHOTO_SENSOR_CHANNEL);
-	if (sampleBitCount == -1) {
-		Log_Debug("ADC_GetSampleBitCount failed with error : %s (%d)\n", strerror(errno), errno);
-		return -1;
-	}
-	if (sampleBitCount == 0) {
-		Log_Debug("ADC_GetSampleBitCount returned sample size of 0 bits.\n");
-		return -1;
-	}
-
-	int result = ADC_SetReferenceVoltage(adcControllerFd, PHOTO_SENSOR_CHANNEL, maxVoltage);
+	result = ADC_SetReferenceVoltage(adcControllerFd, PHOTO_SENSOR_CHANNEL, maxVoltage);
 	if (result < 0) {
+		printInitError("ADC ref voltage");
 		Log_Debug("ADC_SetReferenceVoltage failed with error : %s (%d)\n", strerror(errno), errno);
 		return -1;
 	}
-
-	//// ADC connection
 
 	static const struct timespec sendPeriod = { .tv_sec = 0,.tv_nsec = 25000000 };
 	timerFd = CreateTimerFdAndAddToEpoll(epollFd, &sendPeriod, &timerEventData, EPOLLIN);
@@ -150,7 +211,17 @@ static int InitPeripheralsAndHandlers(void)
 		return -1;
 	}
 
-	//// end ADC Connection
+	//// ADC Connection is initialized
+
+	//// Servos
+
+	initServo(VERTICAL_SERVO_GPIO, &verticalServo, VERTICAL_SERVO_MIN_ANGLE, VERTICAL_SERVO_MAX_ANGLE);
+	initServo(HORIZONTAL_SERVO_GPIO, &horizontalServo, HORIZONTAL_SERVO_MIN_ANGLE, HORIZONTAL_SERVO_MAX_ANGLE);
+
+	SERVO_SetAngle(verticalServo, verticalServoAngle);
+	SERVO_SetAngle(horizontalServo, horizontalServoAngle);
+
+	//// Servos are initialized
 
 	return 0;
 }
@@ -163,24 +234,6 @@ static void ClosePeripheralsAndHandlers(void)
 	Log_Debug("Closing file descriptors.\n");
 	CloseFdAndPrintError(epollFd, "Epoll");
 	CloseFdAndPrintError(adcControllerFd, "ADC");
-}
-
-void initServo(GPIO_Id gpio, struct _SERVO_State** servo, int minAngle, int maxAngle)
-{
-	struct SERVO_Config servoConfig;
-
-	servoConfig.gpio = gpio;
-	servoConfig.minAngle = minAngle;
-	servoConfig.maxAngle = maxAngle;
-	servoConfig.minPulse = 600000;
-	servoConfig.maxPulse = 2400000;
-	servoConfig.period = 20000000;
-
-	if (SERVO_Init(&servoConfig, servo) < 0)
-	{
-		Log_Debug("Error initializing servo 0\n");
-		return -1;
-	}
 }
 
 void recalculateServoAngles(void)
@@ -248,20 +301,6 @@ void recalculateServoAngles(void)
 int main(int argc, char* argv[])
 {
 	Log_Debug("Solar Tracker Application starting.\n");
-
-	sensorSelectAfd = GPIO_OpenAsOutput(SENSOR_SELECT_A_GPIO, GPIO_OutputMode_PushPull, GPIO_Value_High);
-	sensorSelectBfd = GPIO_OpenAsOutput(SENSOR_SELECT_B_GPIO, GPIO_OutputMode_PushPull, GPIO_Value_High);
-	// Select C pin of the 4051 multiplexer is hardwired to GND
-	if (sensorSelectAfd < 0 || sensorSelectBfd < 0) {
-		Log_Debug("Error opening GPIO: %s (%d). Check that app_manifest.json includes the GPIO used.\n", strerror(errno), errno);
-		return -1;
-	}
-
-	initServo(VERTICAL_SERVO_GPIO, &verticalServo, VERTICAL_SERVO_MIN_ANGLE, VERTICAL_SERVO_MAX_ANGLE);
-	initServo(HORIZONTAL_SERVO_GPIO, &horizontalServo, HORIZONTAL_SERVO_MIN_ANGLE, HORIZONTAL_SERVO_MAX_ANGLE);
-
-	SERVO_SetAngle(verticalServo, verticalServoAngle);
-	SERVO_SetAngle(horizontalServo, horizontalServoAngle);
 
 	if (InitPeripheralsAndHandlers() != 0) {
 		terminationRequired = true;

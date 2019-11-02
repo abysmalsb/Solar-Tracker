@@ -48,9 +48,11 @@
   <ItemGroup>
     <ClCompile Include="main.c" />
     <ClCompile Include="epoll_timerfd_utilities.c" />
+    <ClCompile Include="rgb-lcd.c" />
     <ClCompile Include="servo.c" />
     <ClCompile Include="soft-pwm.c" />
     <ClInclude Include="epoll_timerfd_utilities.h" />
+    <ClInclude Include="rgb-lcd.h" />
     <ClInclude Include="servo.h" />
     <ClInclude Include="soft-pwm.h" />
     <UpToDateCheckInput Include="app_manifest.json" />
