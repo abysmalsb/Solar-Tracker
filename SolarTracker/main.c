@@ -1,26 +1,17 @@
 ﻿#include <errno.h>
 #include <stdbool.h>
 #include <signal.h>
-#include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <time.h>
 
 #include <applibs/log.h>
-#include <applibs/gpio.h>
 #include <applibs/adc.h>
 #include <applibs/i2c.h>
 #include <soc/mt3620_i2cs.h>
 
-//// ADC connection
-#include <sys/time.h>
-#include <sys/socket.h>
-#include <applibs/application.h>
-
 #include "hw/solar_tracker_hardware.h"
-#include "servo.h"
-#include "rgb-lcd.h"
 #include "epoll_timerfd_utilities.h"
+#include "rgb-lcd.h"
+#include "servo.h"
 
 // Support functions.
 static void TerminationHandler(int signalNumber);

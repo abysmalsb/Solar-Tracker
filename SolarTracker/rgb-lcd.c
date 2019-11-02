@@ -35,6 +35,7 @@
 #include <inttypes.h>
 #include <time.h>
 #include <applibs/i2c.h>
+#include <stdbool.h>
 
 #include "rgb-lcd.h"
 
@@ -324,7 +325,7 @@ void print(unsigned char *string)
 void printLine(unsigned char row, char* string)
 {
 	setCursor(0, row);
-	int notFinished = 1;
+	int notFinished = true;
 	for (int i = 0; i < _numcols; i++)
 	{
 		notFinished = notFinished && string[i] != '\0';
