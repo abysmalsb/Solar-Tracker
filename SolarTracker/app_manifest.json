@@ -1,0 +1,17 @@
+{
+  "SchemaVersion": 1,
+  "Name": "Solar-Tracker",
+  "ComponentId": "685f13af-25a5-40b2-8dd8-8cbc253ecbd8",
+  "EntryPoint": "/bin/app",
+  "Capabilities": {
+    "Gpio": [
+      "$SENSOR_SELECT_A_GPIO",
+      "$SENSOR_SELECT_B_GPIO",
+      "$VERTICAL_SERVO_GPIO",
+      "$HORIZONTAL_SERVO_GPIO"
+    ],
+    "I2cMaster": [ "$LCD_I2C" ],
+    "Adc": [ "$ADC_CONTROLLER" ]
+  },
+  "ApplicationType": "Default"
+}

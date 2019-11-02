@@ -33,9 +33,6 @@
     <ClInclude Include="epoll_timerfd_utilities.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="config.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="servo.h">
       <Filter>Header Files</Filter>
     </ClInclude>

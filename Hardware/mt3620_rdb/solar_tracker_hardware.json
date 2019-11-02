@@ -1,0 +1,31 @@
+{
+    "Metadata": {
+        "Type": "Azure Sphere Hardware Definition",
+        "Version": 1
+    },
+    "Description":
+    {
+        "Name": "Sample hardware abstraction for MT3620 RDB",
+        "MainCoreHeaderFileTopContent": [
+            "/* Copyright (c) Microsoft Corporation. All rights reserved.",
+            "   Licensed under the MIT License. */",
+            "",
+            "// This file defines the mapping from the MT3620 reference development board (RDB) to the",
+            "// 'sample hardware' abstraction used by the samples at https://github.com/Azure/azure-sphere-samples.",
+            "// Some peripherals are on-board on the RDB, while other peripherals must be attached externally if needed.",
+            "// See TODO(85663) for more information on how to use hardware abstractions",
+            "// to enable apps to work across multiple hardware variants."
+        ]
+    },
+    "Imports" : [ {"Path": "mt3620_rdb.json"} ],
+    "Peripherals": [
+        {"Name": "SENSOR_SELECT_A_GPIO", "Type": "Gpio", "Mapping": "MT3620_GPIO34", "Comment": "Analog channel select A"},
+        {"Name": "SENSOR_SELECT_B_GPIO", "Type": "Gpio", "Mapping": "MT3620_GPIO16", "Comment": "Analog channel select B"},
+        {"Name": "VERTICAL_SERVO_GPIO", "Type": "Gpio", "Mapping": "MT3620_GPIO0", "Comment": "Vertical servo pin"},
+        {"Name": "HORIZONTAL_SERVO_GPIO", "Type": "Gpio", "Mapping": "MT3620_GPIO2", "Comment": "Horizontal servo pin"},
+        {"Name": "ADC_CONTROLLER", "Type": "Adc", "Mapping": "MT3620_RDB_ADC_CONTROLLER0", "Comment": "MT3620 RDB: ADC controller"},
+        {"Name": "PHOTO_SENSOR_CHANNEL", "Type": "int", "Mapping": "MT3620_ADC_CHANNEL1", "Comment": "MT3620 RDB: Connect shared photo sensor connection to ADC controller 0, channel 1 using GPIO42 / ADC pin of the first Click Board adapter"},
+        {"Name": "SOLAR_PANEL_CHANNEL", "Type": "int", "Mapping": "MT3620_ADC_CHANNEL2", "Comment": "MT3620 RDB: Connect solar panel voltage to ADC controller 0, channel 2 using GPIO43 / ADC pin of the second Click Board adapter"},
+		{"Name": "LCD_I2C", "Type": "I2cMaster", "Mapping": "MT3620_RDB_HEADER4_ISU2_I2C", "Comment": "MT3620 RDB: Connect Grove LCD with RGB Backlight using the Grove connector and a 5V VCC"}
+    ]
+}

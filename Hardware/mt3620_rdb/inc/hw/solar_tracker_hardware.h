@@ -1,7 +1,7 @@
 #ifndef SOLAR_TRACKER_CONFIG_H
 #define SOLAR_TRACKER_CONFIG_H
 
-#include <soc/mt3620_gpios.h>
+#include "mt3620_rdb.h"
 
 /// <summary>Analog channel select A</summary>
 #define SENSOR_SELECT_A_GPIO				MT3620_GPIO34
@@ -11,6 +11,12 @@
 #define VERTICAL_SERVO_GPIO					MT3620_GPIO0
 /// <summary>Horizontal servo pin</summary>
 #define HORIZONTAL_SERVO_GPIO				MT3620_GPIO2
+/// <summary>ADC Controller</summary>
+#define ADC_CONTROLLER						MT3620_ADC_CONTROLLER0
+/// <summary>Photo sensor ADC channel</summary>
+#define PHOTO_SENSOR_CHANNEL				MT3620_ADC_CHANNEL1
+/// <summary>Solar panel voltage ADC channel</summary>
+#define SOLAR_PANEL_CHANNEL					MT3620_ADC_CHANNEL2
 
 /// <summary>Number of photosensors</summary>
 #define SENSOR_NUM							4

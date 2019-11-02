@@ -10,14 +10,15 @@
 
 #include <applibs/log.h>
 #include <applibs/gpio.h>
+#include <applibs/adc.h>
 
 //// ADC connection
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <applibs/application.h>
 
+#include "hw/solar_tracker_hardware.h"
 #include "servo.h"
-#include "config.h"
 #include "epoll_timerfd_utilities.h"
 
 // Support functions.
@@ -27,19 +28,18 @@ static void ClosePeripheralsAndHandlers(void);
 
 // File descriptors - initialized to invalid value
 int epollFd = -1;
-int sensorSelectAfd;
-int sensorSelectBfd;
+int adcControllerFd = -1;
+int sensorSelectAfd = -1;
+int sensorSelectBfd = -1;
+
+// The maximum voltage
+static float maxVoltage = 2.5f;
 
 //// ADC connection
-static const char rtAppComponentId[] = "005180bc-402f-4cb3-a662-72937dbcde47";
-static int sockFd = -1;
-static void RequestDataFromRTCoreADC(void);
+static void UpdateLightLevels(void);
 static void TimerEventHandler(EventData* eventData);
-static void SocketEventHandler(EventData* eventData);
 void recalculateServoAngles();
 static int timerFd = -1;
-uint8_t RTCore_status;
-int channel = 0;
 
 int verticalServoAngle = VERTICAL_SERVO_RESTING_ANGLE;
 int horizontalServoAngle = HORIZONTAL_SERVO_RESTING_ANGLE;
@@ -49,7 +49,6 @@ struct _SERVO_State* horizontalServo;
 
 // event handler data structures. Only the event handler field needs to be populated.
 static EventData timerEventData = { .eventHandler = &TimerEventHandler };
-static EventData socketEventData = { .eventHandler = &SocketEventHandler };
 //// end ADC connection
 
 // Termination state
@@ -65,46 +64,7 @@ static void TerminationHandler(int signalNumber)
 }
 
 /// <summary>
-///     Handle socket event by reading incoming data from real-time capable application.
-/// </summary>
-static void SocketEventHandler(EventData* eventData)
-{
-	// Read response from real-time capable application.
-	char rxBuf[32];
-	union Analog_data
-	{
-		uint32_t u32;
-		uint8_t u8[4];
-	} analog_data;
-
-	int bytesReceived = recv(sockFd, rxBuf, sizeof(rxBuf), 0);
-
-	if (bytesReceived == -1) {
-		//Log_Debug("ERROR: Unable to receive message: %d (%s)\n", errno, strerror(errno));
-		terminationRequired = true;
-	}
-
-	// Copy data from Rx buffer to analog_data union
-	for (int i = 0; i < sizeof(analog_data); i++)
-	{
-		analog_data.u8[i] = rxBuf[i];
-	}
-
-	lightLevels[channel] = analog_data.u32;
-
-	if (channel == 3)
-	{
-		channel = 0;
-		recalculateServoAngles();
-	}
-	else 
-	{
-		channel++;
-	}
-}
-
-/// <summary>
-///     Handle send timer event by writing data to the real-time capable application.
+///     
 /// </summary>
 static void TimerEventHandler(EventData* eventData)
 {
@@ -113,31 +73,31 @@ static void TimerEventHandler(EventData* eventData)
 		return;
 	}
 
-	RequestDataFromRTCoreADC();
+	UpdateLightLevels();
 }
 
 /// <summary>
-///     Helper function for TimerEventHandler sends message to real-time capable application.
+///     
 /// </summary>
-static void RequestDataFromRTCoreADC()
+static void UpdateLightLevels()
 {
-	GPIO_SetValue(sensorSelectAfd, (channel & 1) > 0);
-	GPIO_SetValue(sensorSelectBfd, (channel & 2) > 0);
-
-	static int iter = 0;
-
-	// Send a message to real-time capable application.
-	static char txMessage[32];
-	sprintf(txMessage, "Read-ADC-%d", iter++);
-	//Log_Debug("Sending: %s, Channel: %d\n", txMessage, channel);
-
-	int bytesSent = send(sockFd, txMessage, strlen(txMessage), 0);
-	if (bytesSent == -1)
+	for (int channel = 0; channel < SENSOR_NUM; channel++)
 	{
-		//Log_Debug("ERROR: Unable to send message: %d (%s)\n", errno, strerror(errno));
-		terminationRequired = true;
-		return;
+		GPIO_SetValue(sensorSelectAfd, (channel & 1) > 0);
+		GPIO_SetValue(sensorSelectBfd, (channel & 2) > 0);
+
+		uint32_t value;
+		int result = ADC_Poll(adcControllerFd, PHOTO_SENSOR_CHANNEL, &value);
+		if (result < -1) {
+			Log_Debug("ADC_Poll failed with error: %s (%d)\n", strerror(errno), errno);
+			terminationRequired = true;
+			return;
+		}
+
+		lightLevels[channel] = value;
 	}
+
+	recalculateServoAngles();
 }
 
 /// <summary>
@@ -157,46 +117,37 @@ static int InitPeripheralsAndHandlers(void)
 		return -1;
 	}
 
+	adcControllerFd = ADC_Open(ADC_CONTROLLER);
+	if (adcControllerFd < 0) {
+		Log_Debug("ADC_Open failed with error: %s (%d)\n", strerror(errno), errno);
+		return -1;
+	}
+
+	Log_Debug("fd: %d, open: %d, channel: %d\n", adcControllerFd, ADC_CONTROLLER, PHOTO_SENSOR_CHANNEL);
+
+	int sampleBitCount = ADC_GetSampleBitCount(adcControllerFd, PHOTO_SENSOR_CHANNEL);
+	if (sampleBitCount == -1) {
+		Log_Debug("ADC_GetSampleBitCount failed with error : %s (%d)\n", strerror(errno), errno);
+		return -1;
+	}
+	if (sampleBitCount == 0) {
+		Log_Debug("ADC_GetSampleBitCount returned sample size of 0 bits.\n");
+		return -1;
+	}
+
+	int result = ADC_SetReferenceVoltage(adcControllerFd, PHOTO_SENSOR_CHANNEL, maxVoltage);
+	if (result < 0) {
+		Log_Debug("ADC_SetReferenceVoltage failed with error : %s (%d)\n", strerror(errno), errno);
+		return -1;
+	}
+
 	//// ADC connection
 
-	// Open connection to real-time capable application.
-	sockFd = Application_Socket(rtAppComponentId);
-	if (sockFd == -1)
+	static const struct timespec sendPeriod = { .tv_sec = 0,.tv_nsec = 25000000 };
+	timerFd = CreateTimerFdAndAddToEpoll(epollFd, &sendPeriod, &timerEventData, EPOLLIN);
+	if (timerFd < 0)
 	{
-		//Log_Debug("ERROR: Unable to create socket: %d (%s)\n", errno, strerror(errno));
-		Log_Debug("Real Time Core disabled or Component Id is not correct.\n");
-		Log_Debug("The program will continue without showing light sensor data.\n");
-		// Communication with RT core error
-		RTCore_status = 1;
-		//return -1;
-	}
-	else
-	{
-		// Communication with RT core success
-		RTCore_status = 0;
-		// Set timeout, to handle case where real-time capable application does not respond.
-		static const struct timeval recvTimeout = { .tv_sec = 5,.tv_usec = 0 };
-		int result = setsockopt(sockFd, SOL_SOCKET, SO_RCVTIMEO, &recvTimeout, sizeof(recvTimeout));
-		if (result == -1)
-		{
-			//Log_Debug("ERROR: Unable to set socket timeout: %d (%s)\n", errno, strerror(errno));
-			return -1;
-		}
-
-		// Register handler for incoming messages from real-time capable application.
-		if (RegisterEventHandlerToEpoll(epollFd, sockFd, &socketEventData, EPOLLIN) != 0)
-		{
-			return -1;
-		}
-
-		// Register 0.05 second timer to send a message to the real-time core.
-		static const struct timespec sendPeriod = { .tv_sec = 0,.tv_nsec = 5000000 };
-		timerFd = CreateTimerFdAndAddToEpoll(epollFd, &sendPeriod, &timerEventData, EPOLLIN);
-		if (timerFd < 0)
-		{
-			return -1;
-		}
-		RegisterEventHandlerToEpoll(epollFd, timerFd, &timerEventData, EPOLLIN);
+		return -1;
 	}
 
 	//// end ADC Connection
@@ -211,6 +162,7 @@ static void ClosePeripheralsAndHandlers(void)
 {
 	Log_Debug("Closing file descriptors.\n");
 	CloseFdAndPrintError(epollFd, "Epoll");
+	CloseFdAndPrintError(adcControllerFd, "ADC");
 }
 
 void initServo(GPIO_Id gpio, struct _SERVO_State** servo, int minAngle, int maxAngle)
@@ -240,7 +192,6 @@ void recalculateServoAngles(void)
 
 	Log_Debug("%d, %d, %d, %d\n", tl, tr, bl, br);
 
-	int dtime = 10;
 	int tol = 50;
 
 	int avt = (tl + tr) / 2; // average value top
