@@ -25,9 +25,6 @@
     <ClCompile Include="servo.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="soft-pwm.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="rgb-lcd.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -37,9 +34,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="servo.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="soft-pwm.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="rgb-lcd.h">

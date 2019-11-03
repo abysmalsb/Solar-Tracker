@@ -4,8 +4,10 @@
 #include <string.h>
 
 #include <applibs/log.h>
+#include <applibs/gpio.h>
 #include <applibs/adc.h>
 #include <applibs/i2c.h>
+#include <applibs/pwm.h>
 #include <soc/mt3620_i2cs.h>
 
 #include "hw/solar_tracker_hardware.h"
@@ -23,6 +25,7 @@ int epollFd = -1;
 int adcControllerFd = -1;
 int sensorSelectAfd = -1;
 int sensorSelectBfd = -1;
+int pwmControllerFd = -1;
 
 // The maximum voltage
 static float maxVoltage = 2.5f;
@@ -41,6 +44,14 @@ int horizontalServoAngle = HORIZONTAL_SERVO_RESTING_ANGLE;
 int lightLevels[4];	
 struct _SERVO_State* verticalServo;
 struct _SERVO_State* horizontalServo;
+
+// Your servos might have slightly different duty cycles so you might want to edit the 
+// config values.
+static const unsigned int periodNs = 20000000;
+static const unsigned int maxDutyCycleNs = 2400000;
+static const unsigned int minDutyCycleNs = 600000;
+static const unsigned int minAngle = 0;
+static const unsigned int maxAngle = 180;
 
 // event handler data structures. Only the event handler field needs to be populated.
 static EventData timerEventData = { .eventHandler = &TimerEventHandler };
@@ -95,22 +106,25 @@ static void UpdateLightLevels()
 	recalculateServoAngles();
 }
 
-void initServo(GPIO_Id gpio, struct _SERVO_State** servo, int minAngle, int maxAngle)
+void initServo(int pwmFd, unsigned int channel, struct _SERVO_State** servo, int minAngle, int maxAngle)
 {
 	struct SERVO_Config servoConfig;
 
-	servoConfig.gpio = gpio;
-	servoConfig.minAngle = minAngle;
-	servoConfig.maxAngle = maxAngle;
-	servoConfig.minPulse = 600000;
-	servoConfig.maxPulse = 2400000;
-	servoConfig.period = 20000000;
+	servoConfig.pwmFd = pwmFd;
+	servoConfig.pwmChannel = channel;
+	servoConfig.minAngleDeg = minAngle;
+	servoConfig.maxAngleDeg = maxAngle;
+	servoConfig.minPulseNs = minDutyCycleNs;
+	servoConfig.maxPulseNs = maxDutyCycleNs;
+	servoConfig.periodNs = periodNs;
 
 	if (SERVO_Init(&servoConfig, servo) < 0)
 	{
 		Log_Debug("Error initializing servo 0\n");
 		return -1;
 	}
+
+	return 0;
 }
 
 void printInitError(char* errorMessage)
@@ -162,7 +176,7 @@ static int InitPeripheralsAndHandlers(void)
 	// set background color for the display
 	setRGB(0, 255, 255);
 	// Print a message to the LCD.
-	printLine(0, "Initializing");
+	printLine(0, "Starting...");
 
 	//// LCD display is initialized
 
@@ -206,8 +220,17 @@ static int InitPeripheralsAndHandlers(void)
 
 	//// Servos
 
-	initServo(VERTICAL_SERVO_GPIO, &verticalServo, VERTICAL_SERVO_MIN_ANGLE, VERTICAL_SERVO_MAX_ANGLE);
-	initServo(HORIZONTAL_SERVO_GPIO, &horizontalServo, HORIZONTAL_SERVO_MIN_ANGLE, HORIZONTAL_SERVO_MAX_ANGLE);
+	pwmControllerFd = PWM_Open(PWM_CONTROLLER);
+	if (pwmControllerFd == -1) {
+		Log_Debug(
+			"Error opening PWM_CONTROLLER: %s (%d). Check that app_manifest.json "
+			"includes the PWM used.\n",
+			strerror(errno), errno);
+		return -1;
+	}
+
+	initServo(pwmControllerFd, VERTICAL_SERVO_PWM_CHANNEL, &verticalServo, VERTICAL_SERVO_MIN_ANGLE, VERTICAL_SERVO_MAX_ANGLE);
+	initServo(pwmControllerFd, HORIZONTAL_SERVO_PWM_CHANNEL, &horizontalServo, HORIZONTAL_SERVO_MIN_ANGLE, HORIZONTAL_SERVO_MAX_ANGLE);
 
 	SERVO_SetAngle(verticalServo, verticalServoAngle);
 	SERVO_SetAngle(horizontalServo, horizontalServoAngle);
@@ -222,9 +245,13 @@ static int InitPeripheralsAndHandlers(void)
 /// </summary>
 static void ClosePeripheralsAndHandlers(void)
 {
+	SERVO_Destroy(verticalServo);
+	SERVO_Destroy(horizontalServo);
+
 	Log_Debug("Closing file descriptors.\n");
 	CloseFdAndPrintError(epollFd, "Epoll");
 	CloseFdAndPrintError(adcControllerFd, "ADC");
+	CloseFdAndPrintError(pwmControllerFd, "PwmFd");
 }
 
 void recalculateServoAngles(void)

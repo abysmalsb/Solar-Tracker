@@ -6,12 +6,11 @@
   "Capabilities": {
     "Gpio": [
       "$SENSOR_SELECT_A_GPIO",
-      "$SENSOR_SELECT_B_GPIO",
-      "$VERTICAL_SERVO_GPIO",
-      "$HORIZONTAL_SERVO_GPIO"
+      "$SENSOR_SELECT_B_GPIO"
     ],
     "I2cMaster": [ "$LCD_I2C" ],
-    "Adc": [ "$ADC_CONTROLLER" ]
+    "Adc": [ "$ADC_CONTROLLER" ],
+    "Pwm": [ "$PWM_CONTROLLER" ]
   },
   "ApplicationType": "Default"
 }

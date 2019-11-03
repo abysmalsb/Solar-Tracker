@@ -7,10 +7,12 @@
 #define SENSOR_SELECT_A_GPIO				MT3620_GPIO34
 /// <summary>Analog channel select B. Channel C is hardwired to GND</summary>
 #define SENSOR_SELECT_B_GPIO				MT3620_GPIO16
+/// <summary>PWM Controller</summary>
+#define PWM_CONTROLLER						MT3620_RDB_PWM_CONTROLLER0
 /// <summary>Vertical servo pin</summary>
-#define VERTICAL_SERVO_GPIO					MT3620_GPIO0
+#define VERTICAL_SERVO_PWM_CHANNEL			MT3620_PWM_CHANNEL0
 /// <summary>Horizontal servo pin</summary>
-#define HORIZONTAL_SERVO_GPIO				MT3620_GPIO2
+#define HORIZONTAL_SERVO_PWM_CHANNEL		MT3620_PWM_CHANNEL2
 /// <summary>ADC Controller</summary>
 #define ADC_CONTROLLER						MT3620_ADC_CONTROLLER0
 /// <summary>Photo sensor ADC channel</summary>

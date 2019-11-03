@@ -1,107 +1,87 @@
 #include "servo.h"
 #include <stdlib.h>
-#include <stdio.h>
-#include <memory.h>
-#include <unistd.h>
+#include <string.h>
 #include <errno.h>
-#include <time.h>
-#include "soft-pwm.h"
+
+#include <applibs/log.h>
+#include <applibs/pwm.h>
 
 struct _SERVO_State
 {
-	struct _SOFTPWM_State* pwmState;
-	int		minAngle;
-	int		minPulse;
-	int		period;
-	double	nsPerDegree;
-	int		curAngle;
+	struct PwmState* pwmState;
+	int pwmFd;
+	int minAngleDeg;
+	int maxAngleDeg;
+	unsigned int pwmChannel;
+	unsigned int minPulseMs;
+	unsigned int maxPulseMs;
 };
 
 int SERVO_Init(struct SERVO_Config* config, struct _SERVO_State** state)
 {
-	if ((NULL == config) || (NULL == state))
+	if ((NULL == config) || (NULL == state) ||
+		(config->maxAngleDeg <= config->minAngleDeg) ||
+		(config->maxPulseNs <= config->minPulseNs) ||
+		(config->periodNs <= config->maxPulseNs) ||
+		(config->pwmFd < 0))
 	{
 		errno = EINVAL;
-		goto error;
-	}
-
-	if ((config->maxAngle <= config->minAngle) ||
-		(config->maxPulse <= config->minPulse) ||
-		(config->period <= config->maxPulse))
-	{
-		errno = EINVAL;
-		goto error;
+		*state = NULL;
+		Log_Debug("SERVO_Init failed: invalid config or state, errno: %s (%d)\n", strerror(errno));
+		return -1;
 	}
 
 	*state = (struct _SERVO_State*)malloc(sizeof(struct _SERVO_State));
 
-	(*state)->minPulse = config->minPulse;
-	(*state)->nsPerDegree = ((double)(config->maxPulse - config->minPulse)) / (config->maxAngle - config->minAngle);
-	(*state)->minAngle = (*state)->curAngle = config->minAngle;
-	(*state)->period = config->period;
-	(*state)->pwmState = NULL;
+	(*state)->pwmFd = config->pwmFd;
+	(*state)->pwmChannel = config->pwmChannel;
+	(*state)->minPulseMs = config->minPulseNs;
+	(*state)->maxPulseMs = config->maxPulseNs;
+	(*state)->minAngleDeg = config->minAngleDeg;
+	(*state)->maxAngleDeg = config->maxAngleDeg;
+	(*state)->pwmState = (struct PwmState*)malloc(sizeof(struct PwmState));
+	(*state)->pwmState->period_nsec = config->periodNs;
+	(*state)->pwmState->polarity = PWM_Polarity_Normal;
+	(*state)->pwmState->dutyCycle_nsec = 0;
+	(*state)->pwmState->enabled = true;
 
-	struct SOFTPWM_Config pwmConfig;
-
-	pwmConfig.gpio = config->gpio;
-	pwmConfig.active = config->minPulse;
-	pwmConfig.period = config->period;
-
-	if (SOFTPWM_Init(&pwmConfig, &((*state)->pwmState)) < 0)
-		goto error;
-
-	if (SOFTPWM_Start((*state)->pwmState) < 0)
-		goto error;
-
-	return 0;
-
-error:
-
-	if (state)
-	{
-		if (*state)
-			SERVO_Destroy(*state);
-
-		*state = NULL;
-	}
-	return -1;
-}
-
-int SERVO_Destroy(struct _SERVO_State* servoState)
-{
-	if (NULL != servoState)
-	{
-		if (NULL != servoState->pwmState)
-			SOFTPWM_Destroy(servoState->pwmState);
-		free(servoState);
-	}
 	return 0;
 }
 
-int SERVO_SetAngle(struct _SERVO_State* servoState, int angle)
+int SERVO_SetAngle(struct _SERVO_State* servo, int angle)
 {
-	if (NULL == servoState)
+	if (NULL == servo)
 	{
 		errno = EINVAL;
 		return -1;
 	}
 
-	int angleDiff = angle - servoState->curAngle;
+	float pulsePercent;
 
-	if (angleDiff == 0)
-		return 0;
+	if (angle > servo->maxAngleDeg) { pulsePercent = 1.0f; }
+	else if (angle < servo->minAngleDeg) { pulsePercent = 0.0f; }
+	else { pulsePercent = (float)(angle - servo->minAngleDeg) / (servo->maxAngleDeg - servo->minAngleDeg); }
 
-	struct	timespec ts;
-	int		sign = (angle > servoState->curAngle) ? 1 : -1;
+	servo->pwmState->dutyCycle_nsec = (servo->maxPulseMs - servo->minPulseMs) * pulsePercent + servo->minPulseMs;
 
-	ts.tv_sec = 0;
-	ts.tv_nsec = servoState->period;
-
-	for (int i = 0; i < abs(angleDiff); i++)
-	{
-		servoState->curAngle += sign;
-		SOFTPWM_SetPeriod(servoState->pwmState, servoState->period, servoState->minPulse + (int)((servoState->curAngle - servoState->minAngle) * servoState->nsPerDegree));
-		nanosleep(&ts, NULL);
+	int result = PWM_Apply(servo->pwmFd, servo->pwmChannel, servo->pwmState);
+	if (result != 0) {
+		Log_Debug("PWM_Apply failed: result = %d, errno: %s (%d)\n", result, strerror(errno),
+			errno);
+		return -1;
 	}
+
+	return 0;
+}
+
+int SERVO_Destroy(struct _SERVO_State* servo)
+{
+	int result = PWM_Apply(servo->pwmFd, servo->pwmChannel, servo->pwmState);
+	if (result != 0) {
+		Log_Debug("PWM_Apply failed: result = %d, errno value: %s (%d)\n", result,
+			strerror(errno), errno);
+		return result;
+	}
+
 	return 0;
 }

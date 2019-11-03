@@ -21,8 +21,9 @@
     "Peripherals": [
         {"Name": "SENSOR_SELECT_A_GPIO", "Type": "Gpio", "Mapping": "MT3620_GPIO34", "Comment": "Analog channel select A"},
         {"Name": "SENSOR_SELECT_B_GPIO", "Type": "Gpio", "Mapping": "MT3620_GPIO16", "Comment": "Analog channel select B"},
-        {"Name": "VERTICAL_SERVO_GPIO", "Type": "Gpio", "Mapping": "MT3620_GPIO0", "Comment": "Vertical servo pin"},
-        {"Name": "HORIZONTAL_SERVO_GPIO", "Type": "Gpio", "Mapping": "MT3620_GPIO2", "Comment": "Horizontal servo pin"},
+		{"Name": "PWM_CONTROLLER", "Type": "Pwm", "Mapping": "MT3620_RDB_PWM_CONTROLLER0", "Comment": "MT3620 RDB: PWM controller for the servos"},
+        {"Name": "VERTICAL_SERVO_PWM_CHANNEL", "Type": "int", "Mapping": "MT3620_PWM_CHANNEL0", "Comment": "MT3620 RDB: Channel 0 for the vertical servo. In the app manifest, it is only necessary to request the capability for the PWM Controller, SERVO_PWM_CONTROLLER."},
+        {"Name": "HORIZONTAL_SERVO_PWM_CHANNEL", "Type": "int", "Mapping": "MT3620_PWM_CHANNEL2", "Comment": "MT3620 RDB: Channel 2 for the horizontal servo. In the app manifest, it is only necessary to request the capability for the PWM Controller, SERVO_PWM_CONTROLLER."},
         {"Name": "ADC_CONTROLLER", "Type": "Adc", "Mapping": "MT3620_RDB_ADC_CONTROLLER0", "Comment": "MT3620 RDB: ADC controller"},
         {"Name": "PHOTO_SENSOR_CHANNEL", "Type": "int", "Mapping": "MT3620_ADC_CHANNEL1", "Comment": "MT3620 RDB: Connect shared photo sensor connection to ADC controller 0, channel 1 using GPIO42 / ADC pin of the first Click Board adapter"},
         {"Name": "SOLAR_PANEL_CHANNEL", "Type": "int", "Mapping": "MT3620_ADC_CHANNEL2", "Comment": "MT3620 RDB: Connect solar panel voltage to ADC controller 0, channel 2 using GPIO43 / ADC pin of the second Click Board adapter"},
