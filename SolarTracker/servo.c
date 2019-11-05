@@ -1,3 +1,11 @@
+/**************************************************************
+ *
+ * Servo control library for Azure Sphere SDK based devices.
+ *
+ * author: Balázs Simon
+ *
+ **************************************************************/
+
 #include "servo.h"
 #include <stdlib.h>
 #include <string.h>
@@ -48,7 +56,7 @@ int SERVO_Init(struct SERVO_Config* config, struct _SERVO_State** state)
 	return 0;
 }
 
-int SERVO_SetAngle(struct _SERVO_State* servo, int angle)
+int SERVO_SetAngle(struct _SERVO_State* servo, float angle)
 {
 	if (NULL == servo)
 	{

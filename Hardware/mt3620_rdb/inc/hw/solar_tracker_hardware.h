@@ -43,5 +43,7 @@
 #define VERTICAL_SERVO_MAX_ANGLE			140
 /// <summary>Horizontal max angle</summary>
 #define HORIZONTAL_SERVO_MAX_ANGLE			180
+/// <summary>Servo converging speed</summary>
+#define SERVO_CONVERGING_SPEED				500.0f
 
 #endif

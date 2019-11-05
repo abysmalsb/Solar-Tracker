@@ -35,8 +35,8 @@ static float maxVoltage = 2.5f;
 uint8_t displayColumns = 16;
 uint8_t displayRows = 2;
 
-int verticalServoAngle = VERTICAL_SERVO_RESTING_ANGLE;
-int horizontalServoAngle = HORIZONTAL_SERVO_RESTING_ANGLE;
+float verticalServoAngle = VERTICAL_SERVO_RESTING_ANGLE;
+float horizontalServoAngle = HORIZONTAL_SERVO_RESTING_ANGLE;
 uint32_t lightLevels[4];
 struct _SERVO_State* verticalServo;
 struct _SERVO_State* horizontalServo;
@@ -70,50 +70,27 @@ void recalculateServoAngles(void)
 	int bl = lightLevels[SENSOR_BL_SELECT];
 	int br = lightLevels[SENSOR_BR_SELECT];
 
-	int tol = 50;
-
 	int avt = (tl + tr) / 2; // average value top
 	int avd = (bl + br) / 2; // average value down
 	int avl = (tl + bl) / 2; // average value left
 	int avr = (tr + br) / 2; // average value right
 
-	int dvert = avt - avd; // check the difference of up and down
-	int dhoriz = avl - avr;// check the difference of left and right
+	int dvert = avd - avt; // check the difference of up and down
+	int dhoriz = avr - avl;// check the difference of left and right
 
-	if (-1 * tol > dvert || dvert > tol) // check if the difference is in the tolerance else change vertical angle
-	{
-		if (avt < avd)
-		{
-			verticalServoAngle++;
-			if (verticalServoAngle > VERTICAL_SERVO_MAX_ANGLE)
-				verticalServoAngle = VERTICAL_SERVO_MAX_ANGLE;
-		}
-		else if (avt > avd)
-		{
-			verticalServoAngle--;
-			if (verticalServoAngle < VERTICAL_SERVO_MIN_ANGLE)
-				verticalServoAngle = VERTICAL_SERVO_MIN_ANGLE;
-		}
-		SERVO_SetAngle(verticalServo, verticalServoAngle);
-	}
+	verticalServoAngle += dvert / SERVO_CONVERGING_SPEED;
+	if (verticalServoAngle < VERTICAL_SERVO_MIN_ANGLE)
+		verticalServoAngle = VERTICAL_SERVO_MIN_ANGLE;
+	else if (verticalServoAngle > VERTICAL_SERVO_MAX_ANGLE)
+		verticalServoAngle = VERTICAL_SERVO_MAX_ANGLE;
+	SERVO_SetAngle(verticalServo, verticalServoAngle);
 
-	if (-1 * tol > dhoriz || dhoriz > tol) // check if the difference is in the tolerance else change horizontal angle
-	{
-		if (avl > avr)
-		{
-			horizontalServoAngle--;
-			if (horizontalServoAngle < HORIZONTAL_SERVO_MIN_ANGLE)
-				horizontalServoAngle = HORIZONTAL_SERVO_MIN_ANGLE;
-		}
-		else if (avl < avr)
-		{
-			horizontalServoAngle++;
-			if (horizontalServoAngle > HORIZONTAL_SERVO_MAX_ANGLE)
-				horizontalServoAngle = HORIZONTAL_SERVO_MAX_ANGLE;
-		}
-		SERVO_SetAngle(horizontalServo, horizontalServoAngle);
-	}
-	Log_Debug("%d | %d\n", avt - avd, avl - avr);
+	horizontalServoAngle += dhoriz / SERVO_CONVERGING_SPEED;
+	if (horizontalServoAngle < HORIZONTAL_SERVO_MIN_ANGLE)
+		horizontalServoAngle = HORIZONTAL_SERVO_MIN_ANGLE;
+	else if (horizontalServoAngle > HORIZONTAL_SERVO_MAX_ANGLE)
+		horizontalServoAngle = HORIZONTAL_SERVO_MAX_ANGLE;
+	SERVO_SetAngle(horizontalServo, horizontalServoAngle);
 }
 
 /// <summary>
