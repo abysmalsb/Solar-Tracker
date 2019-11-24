@@ -54,6 +54,6 @@
 /// <summary>Waiting nanoseconds in working mode</summary>
 #define POWER_UPDATE_SPEED					500000000
 /// <summary>Solar panel demo power consumer resistance (ohm)</summary>
-#define RESISTANCE							21.6
+#define RESISTANCE							4.7
 
 #endif

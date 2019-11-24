@@ -116,10 +116,10 @@ void recalculateServoAngles(void)
 	SERVO_SetAngle(horizontalServo, horizontalServoAngle);
 }
 
-int AdcRead(int channel)
+unsigned int AdcRead(int channel)
 {
 	uint32_t value;
-	int result = ADC_Poll(adcControllerFd, PHOTO_SENSOR_CHANNEL, &value);
+	int result = ADC_Poll(adcControllerFd, channel, &value);
 	if (result < -1) {
 		Log_Debug("ADC_Poll failed with error: %s (%d)\n", strerror(errno), errno);
 		terminationRequired = true;
@@ -171,9 +171,11 @@ static void PowerTimerEventHandler(EventData* eventData)
 	if (status == Working)
 	{
 		float voltage = 2.5 * AdcRead(SOLAR_PANEL_CHANNEL) / 4096;
-		int powerMilliWatt = 1000 * voltage * voltage / RESISTANCE;
+		float powerMilliWatt = 1000 * voltage * voltage / RESISTANCE;
 		char buf[16];
-		snprintf(buf, 16, "Power: %d mW", powerMilliWatt);
+		if (powerMilliWatt > 10) { snprintf(buf, 16, "Power: %.1f mW", powerMilliWatt); }
+		else if(powerMilliWatt > 1) { snprintf(buf, 16, "Power: %.2f mW", powerMilliWatt); }
+		else { snprintf(buf, 16, "Power: %.3f mW", powerMilliWatt); }
 		printLine(0, buf);
 		printLine(1, "");
 	}
