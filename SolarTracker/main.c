@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <signal.h>
 #include <string.h>
+#include <stdio.h>
 
 #include <applibs/log.h>
 #include <applibs/gpio.h>
@@ -19,11 +20,13 @@
 static void TerminationHandler(int signalNumber);
 static int InitPeripheralsAndHandlers(void);
 static void ClosePeripheralsAndHandlers(void);
-static void TimerEventHandler(EventData* eventData);
+static void TrackerTimerEventHandler(EventData* eventData);
+static void PowerTimerEventHandler(EventData* eventData);
 
 // File descriptors - initialized to invalid value
 int epollFd = -1;
-int timerFd = -1;
+int trackerUpdateTimerFd = -1;
+int powerUpdateTimerFd = -1;
 int adcControllerFd = -1;
 int sensorSelectAfd = -1;
 int sensorSelectBfd = -1;
@@ -35,8 +38,8 @@ static float maxVoltage = 2.5f;
 uint8_t displayColumns = 16;
 uint8_t displayRows = 2;
 
-float verticalServoAngle = VERTICAL_SERVO_RESTING_ANGLE;
-float horizontalServoAngle = HORIZONTAL_SERVO_RESTING_ANGLE;
+float verticalServoAngle = VERTICAL_SERVO_STANDBY_ANGLE;
+float horizontalServoAngle = HORIZONTAL_SERVO_STANDBY_ANGLE;
 uint32_t lightLevels[4];
 struct _SERVO_State* verticalServo;
 struct _SERVO_State* horizontalServo;
@@ -50,9 +53,14 @@ static const uint32_t minAngle = 0;
 static const uint32_t maxAngle = 180;
 
 // event handler data structures. Only the event handler field needs to be populated.
-static EventData timerEventData = { .eventHandler = &TimerEventHandler };
+static EventData trackerTimerEventData = { .eventHandler = &TrackerTimerEventHandler };
+static EventData powerTimerEventData = { .eventHandler = &PowerTimerEventHandler };
 // Termination state
 volatile sig_atomic_t terminationRequired = false;
+
+enum State { Working, Standby};
+
+enum State status = Working;
 
 /// <summary>
 ///     Signal handler for termination requests. This handler must be async-signal-safe.
@@ -75,6 +83,21 @@ void recalculateServoAngles(void)
 	int avl = (tl + bl) / 2; // average value left
 	int avr = (tr + br) / 2; // average value right
 
+	int avgLightLevel = (avt + avl) / 2;
+	if (avgLightLevel < STANDBY_CUT_OFF_LIGHT_LEVEL)
+	{
+		status = Standby;
+		printLine(0, "Low light level");
+		printLine(1, "Standing by");
+		SERVO_SetAngle(verticalServo, VERTICAL_SERVO_STANDBY_ANGLE);
+		SERVO_SetAngle(horizontalServo, HORIZONTAL_SERVO_STANDBY_ANGLE);
+		const struct timespec sleepTime = { STANDBY_UPDATE_SPEED, 0 };
+		nanosleep(&sleepTime, NULL);
+		return;
+	}
+	
+	status = Working;
+
 	int dvert = avd - avt; // check the difference of up and down
 	int dhoriz = avr - avl;// check the difference of left and right
 
@@ -93,6 +116,19 @@ void recalculateServoAngles(void)
 	SERVO_SetAngle(horizontalServo, horizontalServoAngle);
 }
 
+int AdcRead(int channel)
+{
+	uint32_t value;
+	int result = ADC_Poll(adcControllerFd, PHOTO_SENSOR_CHANNEL, &value);
+	if (result < -1) {
+		Log_Debug("ADC_Poll failed with error: %s (%d)\n", strerror(errno), errno);
+		terminationRequired = true;
+		return -1;
+	}
+
+	return value;
+}
+
 /// <summary>
 ///	Updating the light levels of the photo sensors and calculating new positions for the servos
 /// </summary>
@@ -103,15 +139,7 @@ void RefreshServoPositions()
 		GPIO_SetValue(sensorSelectAfd, (channel & 1) > 0);
 		GPIO_SetValue(sensorSelectBfd, (channel & 2) > 0);
 
-		uint32_t value;
-		int result = ADC_Poll(adcControllerFd, PHOTO_SENSOR_CHANNEL, &value);
-		if (result < -1) {
-			Log_Debug("ADC_Poll failed with error: %s (%d)\n", strerror(errno), errno);
-			terminationRequired = true;
-			return;
-		}
-
-		lightLevels[channel] = value;
+		lightLevels[channel] = AdcRead(PHOTO_SENSOR_CHANNEL);
 	}
 
 	recalculateServoAngles();
@@ -120,14 +148,35 @@ void RefreshServoPositions()
 /// <summary>
 ///		Periodically updates the servos based on the sensors' data 
 /// </summary>
-static void TimerEventHandler(EventData* eventData)
+static void TrackerTimerEventHandler(EventData* eventData)
 {
-	if (ConsumeTimerFdEvent(timerFd) != 0) {
+	if (ConsumeTimerFdEvent(trackerUpdateTimerFd) != 0) {
 		terminationRequired = true;
 		return;
 	}
 
 	RefreshServoPositions();
+}
+
+/// <summary>
+///		Periodically updates power production on the display and Azure
+/// </summary>
+static void PowerTimerEventHandler(EventData* eventData)
+{
+	if (ConsumeTimerFdEvent(powerUpdateTimerFd) != 0) {
+		terminationRequired = true;
+		return;
+	}
+
+	if (status == Working)
+	{
+		float voltage = 2.5 * AdcRead(SOLAR_PANEL_CHANNEL) / 4096;
+		int powerMilliWatt = 1000 * voltage * voltage / RESISTANCE;
+		char buf[16];
+		snprintf(buf, 16, "Power: %d mW", powerMilliWatt);
+		printLine(0, buf);
+		printLine(1, "");
+	}
 }
 
 /// <summary>
@@ -240,14 +289,25 @@ static int InitPeripheralsAndHandlers(void)
 		return -1;
 	}
 
-	static const struct timespec sendPeriod = { .tv_sec = 0,.tv_nsec = 25000000 };
-	timerFd = CreateTimerFdAndAddToEpoll(epollFd, &sendPeriod, &timerEventData, EPOLLIN);
-	if (timerFd < 0)
+	//// ADC Connection is initialized
+
+	//// Timers init
+
+	static const struct timespec trackerUpdatePeriod = { .tv_sec = 0,.tv_nsec = WORKING_UPDATE_SPEED };
+	trackerUpdateTimerFd = CreateTimerFdAndAddToEpoll(epollFd, &trackerUpdatePeriod, &trackerTimerEventData, EPOLLIN);
+	if (trackerUpdateTimerFd < 0)
 	{
 		return -1;
 	}
 
-	//// ADC Connection is initialized
+	static const struct timespec powerUpdatePeriod = { .tv_sec = 0,.tv_nsec = POWER_UPDATE_SPEED };
+	powerUpdateTimerFd = CreateTimerFdAndAddToEpoll(epollFd, &powerUpdatePeriod, &powerTimerEventData, EPOLLIN);
+	if (powerUpdateTimerFd < 0)
+	{
+		return -1;
+	}
+
+	//// Timers initialized
 
 	//// Servos
 
@@ -281,7 +341,8 @@ static void ClosePeripheralsAndHandlers(void)
 
 	Log_Debug("Closing file descriptors.\n");
 	CloseFdAndPrintError(epollFd, "Epoll");
-	CloseFdAndPrintError(timerFd, "ServoPositionUpdateTimer");
+	CloseFdAndPrintError(trackerUpdateTimerFd, "TrackerUpdateTimer");
+	CloseFdAndPrintError(powerUpdateTimerFd, "PowerUpdateTimer");
 	CloseFdAndPrintError(sensorSelectAfd, "SensorChannelSelectA");
 	CloseFdAndPrintError(sensorSelectBfd, "SensorChannelSelectB");
 	CloseFdAndPrintError(adcControllerFd, "ADC");
