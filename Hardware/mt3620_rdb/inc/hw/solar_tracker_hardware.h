@@ -32,9 +32,13 @@
 #define SENSOR_BR_SELECT					3
 
 /// <summary>Vertical resting angle</summary>
+#define VERTICAL_SERVO_DISABLED_ANGLE		115
+/// <summary>Horizontal resting angle</summary>
+#define HORIZONTAL_SERVO_DISABLED_ANGLE		90
+/// <summary>Vertical resting angle</summary>
 #define VERTICAL_SERVO_STANDBY_ANGLE		0
 /// <summary>Horizontal resting angle</summary>
-#define HORIZONTAL_SERVO_STANDBY_ANGLE		90
+#define HORIZONTAL_SERVO_STANDBY_ANGLE		HORIZONTAL_SERVO_DISABLED_ANGLE
 /// <summary>Vertical min angle</summary>
 #define VERTICAL_SERVO_MIN_ANGLE			0
 /// <summary>Horizontal min angle</summary>
